@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 import { onRequest } from '../functions/api/[action].js';
-import { intervalFor, netMinutes } from '../lib/optimus-hours.js';
+import {
+  intervalFor,
+  netMinutes,
+  nonWorkingReason,
+} from '../lib/optimus-hours.js';
 
 const originalFetch = globalThis.fetch;
 afterEach(() => {
@@ -259,6 +263,38 @@ test('net hours reconcile with the Optimus September statement', () => {
     end: '12:50',
     minutes: 60,
   });
+});
+
+test('holiday activity and weekend agendas stay out of period totals', () => {
+  const items = [
+    {
+      date: '2026-09-07',
+      activityName: 'FERIADO',
+      start: '08:00',
+      end: '17:00',
+    },
+    {
+      date: '2026-09-19',
+      activityName: 'DESENVOLVIMENTO',
+      start: '08:00',
+      end: '12:00',
+    },
+    {
+      date: '2026-09-08',
+      activityName: 'DESENVOLVIMENTO',
+      start: '08:00',
+      end: '17:00',
+    },
+  ];
+  assert.equal(nonWorkingReason(items[0]), 'Feriado');
+  assert.equal(nonWorkingReason(items[1]), 'Fim de semana');
+  assert.equal(nonWorkingReason(items[2]), '');
+  assert.equal(
+    items
+      .filter((item) => !nonWorkingReason(item))
+      .reduce((sum, item) => sum + netMinutes(item.start, item.end), 0),
+    8 * 60,
+  );
 });
 
 test('cross-origin write is rejected before the Optimus API is called', async () => {

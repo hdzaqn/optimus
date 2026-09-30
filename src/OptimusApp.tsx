@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { readSheet } from 'read-excel-file/browser';
-import { intervalFor, netMinutes } from '../lib/optimus-hours.js';
+import {
+  intervalFor,
+  netMinutes,
+  nonWorkingReason,
+} from '../lib/optimus-hours.js';
 import './optimus.css';
 
 type Agenda = {
@@ -213,17 +217,23 @@ export default function OptimusPage() {
   }, [rows]);
 
   const summary = useMemo(() => {
-    const totalMinutes = agendas.reduce(
+    const counted = agendas.filter((item) => !nonWorkingReason(item));
+    const excluded = agendas.filter((item) => nonWorkingReason(item));
+    const totalMinutes = counted.reduce(
       (sum, item) => sum + Math.max(0, agendaMinutes(item) || 0),
       0,
     );
-    const posted = agendas.filter((item) => item.posted);
+    const excludedMinutes = excluded.reduce(
+      (sum, item) => sum + Math.max(0, agendaMinutes(item) || 0),
+      0,
+    );
+    const posted = counted.filter((item) => item.posted);
     const postedMinutes = posted.reduce(
       (sum, item) => sum + Math.max(0, agendaMinutes(item) || 0),
       0,
     );
     const clients = new Map<string, { count: number; minutes: number }>();
-    agendas.forEach((item) => {
+    counted.forEach((item) => {
       const name = item.customer || item.emitenteName || 'Não informado';
       const previous = clients.get(name) || { count: 0, minutes: 0 };
       clients.set(name, {
@@ -233,9 +243,12 @@ export default function OptimusPage() {
     });
     return {
       totalMinutes,
+      excludedMinutes,
+      excludedCount: excluded.length,
+      countedCount: counted.length,
       postedMinutes,
       postedCount: posted.length,
-      pendingCount: agendas.length - posted.length,
+      pendingCount: counted.length - posted.length,
       clients: [...clients.entries()]
         .map(([name, values]) => ({ name, ...values }))
         .sort((a, b) => b.minutes - a.minutes || a.name.localeCompare(b.name)),
@@ -505,6 +518,7 @@ export default function OptimusPage() {
       'Fim',
       'Intervalo presumido',
       'Horas líquidas agenda',
+      'Na soma',
       'Apontada',
       'Horas planilha',
       'Autorizado por',
@@ -523,6 +537,7 @@ export default function OptimusPage() {
           item?.end || '',
           item ? intervalLabel(item) : '',
           item ? hours(agendaMinutes(item)) : '',
+          item ? nonWorkingReason(item) || 'Sim' : '',
           item?.posted ? 'Sim' : 'Não',
           row ? hours(row.sheetMinutes) : '',
           row?.authorizedBy || '',
@@ -708,18 +723,19 @@ export default function OptimusPage() {
                     <p>
                       {displayDate(appliedPeriod.start)} a{' '}
                       {displayDate(appliedPeriod.end)} · Horas líquidas das
-                      agendas. Intervalo presumido de 1h quando o período excede
-                      6h. O extrato considera apenas os apontamentos realizados.
+                      agendas em dias úteis. Feriados identificados na agenda e
+                      fins de semana ficam fora da soma. Intervalo presumido de
+                      1h quando o período excede 6h.
                     </p>
                   </div>
                 </div>
                 <div className="opt-metrics">
                   <article className="opt-metric opt-metric-primary">
-                    <span>Horas líquidas das agendas</span>
+                    <span>Horas em dias úteis</span>
                     <strong>
                       {hours(summary.totalMinutes)} <small>h</small>
                     </strong>
-                    <p>{agendas.length} agendas no período</p>
+                    <p>{summary.countedCount} de {agendas.length} agendas na soma</p>
                   </article>
                   <article className="opt-metric">
                     <span>Marcadas como apontadas</span>
@@ -742,6 +758,13 @@ export default function OptimusPage() {
                     <p>com agendas no período</p>
                   </article>
                 </div>
+                {summary.excludedCount > 0 && (
+                  <p className="opt-accounting-note">
+                    Fora da soma: {hours(summary.excludedMinutes)} h em{' '}
+                    {summary.excludedCount} agenda(s) de feriado ou fim de semana.
+                    Essas linhas continuam visíveis para conferência.
+                  </p>
+                )}
                 {rows.length > 0 && (
                   <div className="opt-import-summary">
                     <div>
@@ -758,7 +781,7 @@ export default function OptimusPage() {
                             0,
                           ),
                         )}{' '}
-                        h informadas
+                        h informadas no arquivo (soma bruta)
                       </span>
                     </div>
                     <div>
@@ -857,6 +880,7 @@ export default function OptimusPage() {
                         <th>Horário</th>
                         <th>Intervalo presumido</th>
                         <th>Horas líquidas</th>
+                        <th>Na soma</th>
                         <th>Situação</th>
                       </tr>
                     </thead>
@@ -876,6 +900,7 @@ export default function OptimusPage() {
                           </td>
                           <td>{intervalLabel(item)}</td>
                           <td>{hours(agendaMinutes(item))}</td>
+                          <td>{nonWorkingReason(item) || 'Sim'}</td>
                           <td>
                             <span
                               className={`opt-pill ${item.posted ? 'opt-warn' : 'opt-good'}`}
@@ -1061,8 +1086,9 @@ export default function OptimusPage() {
                     <p>
                       {displayDate(appliedPeriod.start)} a{' '}
                       {displayDate(appliedPeriod.end)} · Horas líquidas das
-                      agendas. Intervalo presumido de 1h quando o período excede
-                      6h. O extrato considera apenas os apontamentos realizados.
+                      agendas em dias úteis. Feriados identificados na agenda e
+                      fins de semana ficam fora da soma. Intervalo presumido de
+                      1h quando o período excede 6h.
                     </p>
                   </div>
                   <div className="opt-actions opt-print-hide">
@@ -1076,7 +1102,7 @@ export default function OptimusPage() {
                 </div>
                 <div className="opt-report-summary">
                   <div>
-                    <span>Horas líquidas das agendas</span>
+                    <span>Horas em dias úteis</span>
                     <strong>{hours(summary.totalMinutes)} h</strong>
                   </div>
                   <div>
@@ -1090,8 +1116,9 @@ export default function OptimusPage() {
                     </strong>
                   </div>
                   <div>
-                    <span>Agendas</span>
-                    <strong>{agendas.length}</strong>
+                    <span>Fora da soma</span>
+                    <strong>{hours(summary.excludedMinutes)} h</strong>
+                    <small>{summary.excludedCount} de {agendas.length} agendas</small>
                   </div>
                 </div>
                 <section className="opt-panel">
@@ -1106,7 +1133,7 @@ export default function OptimusPage() {
                       <thead>
                         <tr>
                           <th>Cliente</th>
-                          <th>Agendas</th>
+                          <th>Agendas na soma</th>
                           <th>Horas líquidas</th>
                           <th>% do período</th>
                         </tr>
@@ -1159,6 +1186,7 @@ export default function OptimusPage() {
                           <th>Horário</th>
                           <th>Intervalo presumido</th>
                           <th>Horas líquidas</th>
+                          <th>Na soma</th>
                           <th>Apontada</th>
                           <th>Horas planilha</th>
                           <th>Autorizado por</th>
@@ -1195,6 +1223,7 @@ export default function OptimusPage() {
                               </td>
                               <td>{item ? intervalLabel(item) : '—'}</td>
                               <td>{item ? hours(agendaMinutes(item)) : '—'}</td>
+                              <td>{item ? nonWorkingReason(item) || 'Sim' : '—'}</td>
                               <td>{item?.posted ? 'Sim' : 'Não'}</td>
                               <td>{row ? hours(row.sheetMinutes) : '—'}</td>
                               <td>{row?.authorizedBy || '—'}</td>

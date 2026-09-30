@@ -227,6 +227,14 @@
   gap: 12px;
   margin-bottom: 18px;
 }
+.opt-accounting-note {
+  margin: -5px 0 18px;
+  padding: 10px 14px;
+  border-left: 3px solid #9faebe;
+  background: #eef2f6;
+  color: #40546b;
+  font-size: 0.79rem;
+}
 .opt-metric {
   min-height: 133px;
   padding: 19px 20px;
@@ -482,6 +490,12 @@
   margin-top: 8px;
   color: #203b59;
   font-size: 1.2rem;
+}
+.opt-report-summary small {
+  display: block;
+  margin-top: 5px;
+  color: #738090;
+  font-size: 0.72rem;
 }
 .opt-report-table {
   min-width: 1500px !important;
