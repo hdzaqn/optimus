@@ -1,3 +1,9 @@
+import {
+  intervalFor,
+  minutes,
+  netMinutes,
+} from '../../lib/optimus-hours.js';
+
 const ORIGIN = 'https://optimus.consultoriaprime.com';
 const ACCESS = 'hb_optimus_access';
 const IDENTITY = 'hb_optimus_identity';
@@ -73,15 +79,13 @@ function sameOrigin(request) {
 }
 
 function date(value) {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value))
+    return false;
   const parsed = new Date(`${value}T00:00:00Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-}
-
-function minutes(value) {
-  if (typeof value !== 'string' || !/^\d{2}:\d{2}$/.test(value)) return NaN;
-  const [hour, minute] = value.split(':').map(Number);
-  return hour < 24 && minute < 60 ? hour * 60 + minute : NaN;
+  return (
+    !Number.isNaN(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  );
 }
 
 function agendaItems(data, login) {
@@ -162,7 +166,8 @@ function sameClient(sheet, item) {
 }
 
 function makePayload(item, login, authorizedBy, narrative, tipoHora) {
-  const totalMinutes = minutes(item.end) - minutes(item.start);
+  const totalMinutes = netMinutes(item.start, item.end);
+  const interval = intervalFor(item.start, item.end);
   const hhmm = `${String(Math.floor(totalMinutes / 60)).padStart(2, '0')}:${String(totalMinutes % 60).padStart(2, '0')}`;
   const stamp = Math.floor(Date.now() / 1000);
   const code = login.toUpperCase();
@@ -180,8 +185,8 @@ function makePayload(item, login, authorizedBy, narrative, tipoHora) {
         'dt-upload': item.date,
         'hora-atend-fim': item.end,
         'hora-atend-ini': item.start,
-        'hora-interv-ini': '00:00',
-        'hora-interv-fim': '00:00',
+        'hora-interv-ini': interval.start,
+        'hora-interv-fim': interval.end,
         'hora-total': hhmm,
         'hora-total-dec': totalMinutes / 60,
         local: Number(item.location),
@@ -344,7 +349,7 @@ export async function onRequest({ request, params }) {
         );
       if (item.posted)
         return reply({ error: 'Esta agenda já possui apontamento.' }, 409);
-      const totalMinutes = minutes(item.end) - minutes(item.start);
+      const totalMinutes = netMinutes(item.start, item.end);
       if (
         !Number.isFinite(totalMinutes) ||
         totalMinutes <= 0 ||
@@ -353,7 +358,7 @@ export async function onRequest({ request, params }) {
         return reply(
           {
             error:
-              'Horas da planilha e da agenda são diferentes. Revise a linha.',
+              'Horas da planilha e da agenda, descontado o intervalo, são diferentes. Revise a linha.',
           },
           409,
         );

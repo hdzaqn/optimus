@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { readSheet } from 'read-excel-file/browser';
+import { intervalFor, netMinutes } from '../lib/optimus-hours.js';
 import './optimus.css';
 
 type Agenda = {
@@ -98,11 +99,12 @@ function minutesFromCell(value: unknown): number {
 }
 
 function agendaMinutes(item: Agenda) {
-  const [a, b] = [item.start, item.end].map((time) => {
-    const [hour, minute] = time.split(':').map(Number);
-    return hour * 60 + minute;
-  });
-  return b - a;
+  return netMinutes(item.start, item.end);
+}
+
+function intervalLabel(item: Agenda) {
+  const interval = intervalFor(item.start, item.end);
+  return interval.minutes ? `${interval.start}–${interval.end}` : '—';
 }
 
 function hours(minutes: number) {
@@ -276,7 +278,7 @@ export default function OptimusPage() {
     if (item.posted) return { label: 'Já apontada no Optimus', kind: 'issue' };
     if (agendaMinutes(item) !== row.sheetMinutes)
       return {
-        label: `Horas diferentes: planilha ${hours(row.sheetMinutes)} / agenda ${hours(agendaMinutes(item))}`,
+        label: `Horas diferentes: planilha ${hours(row.sheetMinutes)} / agenda líquida ${hours(agendaMinutes(item))}`,
         kind: 'issue',
       };
     if (!row.authorizedBy.trim() || !row.narrative.trim())
@@ -501,7 +503,8 @@ export default function OptimusPage() {
       'Atividade',
       'Início',
       'Fim',
-      'Horas agenda',
+      'Intervalo presumido',
+      'Horas líquidas agenda',
       'Apontada',
       'Horas planilha',
       'Autorizado por',
@@ -518,6 +521,7 @@ export default function OptimusPage() {
           item ? `${item.activity} · ${item.activityName}` : '',
           item?.start || '',
           item?.end || '',
+          item ? intervalLabel(item) : '',
           item ? hours(agendaMinutes(item)) : '',
           item?.posted ? 'Sim' : 'Não',
           row ? hours(row.sheetMinutes) : '',
@@ -703,28 +707,29 @@ export default function OptimusPage() {
                     <h2>Resumo do período</h2>
                     <p>
                       {displayDate(appliedPeriod.start)} a{' '}
-                      {displayDate(appliedPeriod.end)} · Horas calculadas pelo
-                      horário das agendas.
+                      {displayDate(appliedPeriod.end)} · Horas líquidas das
+                      agendas. Intervalo presumido de 1h quando o período excede
+                      6h. O extrato considera apenas os apontamentos realizados.
                     </p>
                   </div>
                 </div>
                 <div className="opt-metrics">
                   <article className="opt-metric opt-metric-primary">
-                    <span>Horas de agenda</span>
+                    <span>Horas líquidas das agendas</span>
                     <strong>
                       {hours(summary.totalMinutes)} <small>h</small>
                     </strong>
                     <p>{agendas.length} agendas no período</p>
                   </article>
                   <article className="opt-metric">
-                    <span>Já apontadas</span>
+                    <span>Marcadas como apontadas</span>
                     <strong>
                       {hours(summary.postedMinutes)} <small>h</small>
                     </strong>
                     <p>{summary.postedCount} agendas</p>
                   </article>
                   <article className="opt-metric">
-                    <span>Aguardando apontamento</span>
+                    <span>Não marcadas como apontadas</span>
                     <strong>
                       {hours(summary.totalMinutes - summary.postedMinutes)}{' '}
                       <small>h</small>
@@ -850,7 +855,8 @@ export default function OptimusPage() {
                         <th>Projeto</th>
                         <th>Atividade</th>
                         <th>Horário</th>
-                        <th>Horas</th>
+                        <th>Intervalo presumido</th>
+                        <th>Horas líquidas</th>
                         <th>Situação</th>
                       </tr>
                     </thead>
@@ -868,6 +874,7 @@ export default function OptimusPage() {
                           <td>
                             {item.start}–{item.end}
                           </td>
+                          <td>{intervalLabel(item)}</td>
                           <td>{hours(agendaMinutes(item))}</td>
                           <td>
                             <span
@@ -1053,8 +1060,9 @@ export default function OptimusPage() {
                     <h2>Relatório do período</h2>
                     <p>
                       {displayDate(appliedPeriod.start)} a{' '}
-                      {displayDate(appliedPeriod.end)} · Horas calculadas pelo
-                      horário das agendas.
+                      {displayDate(appliedPeriod.end)} · Horas líquidas das
+                      agendas. Intervalo presumido de 1h quando o período excede
+                      6h. O extrato considera apenas os apontamentos realizados.
                     </p>
                   </div>
                   <div className="opt-actions opt-print-hide">
@@ -1068,15 +1076,15 @@ export default function OptimusPage() {
                 </div>
                 <div className="opt-report-summary">
                   <div>
-                    <span>Horas de agenda</span>
+                    <span>Horas líquidas das agendas</span>
                     <strong>{hours(summary.totalMinutes)} h</strong>
                   </div>
                   <div>
-                    <span>Já apontadas</span>
+                    <span>Marcadas como apontadas</span>
                     <strong>{hours(summary.postedMinutes)} h</strong>
                   </div>
                   <div>
-                    <span>Aguardando</span>
+                    <span>Não marcadas</span>
                     <strong>
                       {hours(summary.totalMinutes - summary.postedMinutes)} h
                     </strong>
@@ -1099,7 +1107,7 @@ export default function OptimusPage() {
                         <tr>
                           <th>Cliente</th>
                           <th>Agendas</th>
-                          <th>Horas de agenda</th>
+                          <th>Horas líquidas</th>
                           <th>% do período</th>
                         </tr>
                       </thead>
@@ -1149,7 +1157,8 @@ export default function OptimusPage() {
                           <th>Cliente</th>
                           <th>Projeto / atividade</th>
                           <th>Horário</th>
-                          <th>Horas agenda</th>
+                          <th>Intervalo presumido</th>
+                          <th>Horas líquidas</th>
                           <th>Apontada</th>
                           <th>Horas planilha</th>
                           <th>Autorizado por</th>
@@ -1184,6 +1193,7 @@ export default function OptimusPage() {
                               <td>
                                 {item ? `${item.start}–${item.end}` : '—'}
                               </td>
+                              <td>{item ? intervalLabel(item) : '—'}</td>
                               <td>{item ? hours(agendaMinutes(item)) : '—'}</td>
                               <td>{item?.posted ? 'Sim' : 'Não'}</td>
                               <td>{row ? hours(row.sheetMinutes) : '—'}</td>
